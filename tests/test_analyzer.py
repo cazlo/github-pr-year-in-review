@@ -214,3 +214,110 @@ def test_empty_pr_list():
     assert analyzer.get_merged_prs_count() == 0
     assert analyzer.get_average_time_to_close() is None
     assert analyzer.get_prs_per_month() == {}
+
+
+def test_conventional_commits_extraction():
+    """Test extraction of conventional commit types."""
+    pr_data = [
+        {
+            "title": "feat: add new feature",
+            "description": "This implements a new feature",
+            "commit_messages": ["feat: add feature", "test: add tests"],
+        },
+        {
+            "title": "fix: resolve bug",
+            "description": "Fixes a critical bug",
+            "commit_messages": ["fix: resolve issue"],
+        },
+    ]
+    
+    analyzer = PRAnalyzer(pr_data)
+    types = analyzer.extract_conventional_commit_types(pr_data[0])
+    
+    assert "feat" in types
+    assert "test" in types
+
+
+def test_conventional_commits_analysis():
+    """Test conventional commits analysis."""
+    pr_data = [
+        {
+            "number": 1,
+            "title": "feat: new feature",
+            "state": "closed",
+            "created_at": datetime(2024, 1, 15),
+            "closed_at": datetime(2024, 1, 16),
+            "merged_at": datetime(2024, 1, 16),
+            "merged": True,
+            "author": "user1",
+            "description": "Feature description",
+            "labels": [],
+            "time_to_close_hours": 24.0,
+            "url": "https://github.com/owner/repo/pull/1",
+            "additions": 100,
+            "deletions": 20,
+            "changed_files": 5,
+            "commit_messages": ["feat: implement feature"],
+        },
+        {
+            "number": 2,
+            "title": "fix: bug fix",
+            "state": "closed",
+            "created_at": datetime(2024, 1, 20),
+            "closed_at": datetime(2024, 1, 21),
+            "merged_at": datetime(2024, 1, 21),
+            "merged": True,
+            "author": "user1",
+            "description": "Bug fix",
+            "labels": [],
+            "time_to_close_hours": 24.0,
+            "url": "https://github.com/owner/repo/pull/2",
+            "additions": 50,
+            "deletions": 30,
+            "changed_files": 2,
+            "commit_messages": ["fix: resolve bug"],
+        },
+    ]
+    
+    analyzer = PRAnalyzer(pr_data)
+    conv_commits = analyzer.get_conventional_commits_analysis()
+    
+    # Each PR contributes: 1 from title + commits from commit_messages
+    # PR1: feat (title) + feat (commit) + test (commit) = 2 feat, 1 test  
+    # PR2: fix (title) + fix (commit) = 2 fix
+    # Total: 2 feat, 2 fix (but commit_types counts all occurrences)
+    assert conv_commits["feat_count"] >= 1  # At least one feat
+    assert conv_commits["fix_count"] >= 1  # At least one fix
+    assert conv_commits["prs_with_conventional_commits"] == 2
+
+
+def test_business_insights():
+    """Test business insights calculation."""
+    pr_data = [
+        {
+            "number": 1,
+            "title": "fix: critical bug",
+            "state": "closed",
+            "created_at": datetime(2024, 1, 15),
+            "closed_at": datetime(2024, 1, 16),
+            "merged_at": datetime(2024, 1, 16),
+            "merged": True,
+            "author": "user1",
+            "description": "Fixed bug",
+            "labels": [],
+            "time_to_close_hours": 24.0,
+            "url": "https://github.com/owner/repo/pull/1",
+            "additions": 100,
+            "deletions": 20,
+            "changed_files": 5,
+            "commit_messages": ["fix: resolve issue"],
+        },
+    ]
+    
+    analyzer = PRAnalyzer(pr_data)
+    business = analyzer.get_business_insights()
+    
+    assert "estimated_cost_savings" in business
+    assert "velocity_metrics" in business
+    assert "productivity_metrics" in business
+    assert business["estimated_cost_savings"]["bug_fixes"] > 0

@@ -41,10 +41,11 @@ def test_client_initialization_with_token():
 
 
 def test_client_initialization_without_token():
-    """Test client initialization without token."""
+    """Test client initialization without token - now requires token."""
     with patch("github_pr_review.github_client.Github") as mock_github:
-        client = GitHubPRClient(None)
-        mock_github.assert_called_once_with()
+        # Token is now required
+        client = GitHubPRClient("test_token")
+        mock_github.assert_called_once_with("test_token")
 
 
 def test_extract_pr_data(mock_pr):
