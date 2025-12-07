@@ -1,7 +1,7 @@
 """GitHub API client for fetching PR data."""
 
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional, Set
 from github import Github, PullRequest, Repository
 from github.GithubException import GithubException
@@ -33,27 +33,40 @@ class GitHubPRClient:
         Returns:
             List of Repository objects
         """
+        repos: List[Repository.Repository] = []
+        seen: Set[str] = set()
+
+        # First try to treat the input as an organization. If that fails
+        # (for example the name is a personal account and returns 404),
+        # fall back to treating it as a user account and iterate their repos.
         try:
-            org = self.github.get_organization(org_name)
-            repos = []
-            
-            # Get all repos in the org (includes private if token has access)
-            for repo in org.get_repos(type="all"):
-                # Check if user has contributed to this repo
-                try:
-                    # Try to get at least one PR or commit from user
-                    repo_prs = repo.get_pulls(state="all")
-                    for pr in repo_prs:
-                        if pr.user and pr.user.login == username:
-                            repos.append(repo)
-                            break
-                except GithubException:
-                    # Skip repos we can't access
-                    continue
-            
-            return repos
-        except GithubException as e:
-            raise RuntimeError(f"Failed to fetch repos for org {org_name}: {e}")
+            repo_iterable = self.github.get_organization(org_name).get_repos(type="all")
+        except GithubException:
+            # Not an organization or inaccessible as organization; try user
+            try:
+                repo_iterable = self.user.get_repos(visibility="all")
+            except GithubException as e:
+                raise RuntimeError(f"Failed to fetch repos for org/user {org_name}: {e}")
+
+        # Iterate over repos and include ones the target username has contributed to.
+        for repo in repo_iterable:
+            # Avoid duplicates if any
+            full_name = getattr(repo, "full_name", None) or getattr(repo, "name", None)
+            if full_name in seen:
+                continue
+
+            try:
+                repo_prs = repo.get_pulls(state="all")
+                for pr in repo_prs:
+                    if pr.user and pr.user.login == username:
+                        repos.append(repo)
+                        seen.add(full_name)
+                        break
+            except GithubException:
+                # Skip repos we can't access
+                continue
+
+        return repos
 
     def get_prs_for_user_in_repo(
         self, repo: Repository.Repository, username: str, year: Optional[int] = None
@@ -69,12 +82,12 @@ class GitHubPRClient:
         Returns:
             List of PullRequest objects
         """
-        # Calculate date range
+        # Calculate date range (use timezone-aware UTC datetimes to match PR timestamps)
         if year:
-            start_date = datetime(year, 1, 1)
-            end_date = datetime(year, 12, 31, 23, 59, 59)
+            start_date = datetime(year, 1, 1, tzinfo=timezone.utc)
+            end_date = datetime(year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
         else:
-            end_date = datetime.now()
+            end_date = datetime.now(timezone.utc)
             start_date = end_date - timedelta(days=365)
 
         prs = []
@@ -109,12 +122,12 @@ class GitHubPRClient:
         """
         repository = self.github.get_repo(f"{owner}/{repo}")
 
-        # Calculate date range
+        # Calculate date range (use timezone-aware UTC datetimes to match PR timestamps)
         if year:
-            start_date = datetime(year, 1, 1)
-            end_date = datetime(year, 12, 31, 23, 59, 59)
+            start_date = datetime(year, 1, 1, tzinfo=timezone.utc)
+            end_date = datetime(year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
         else:
-            end_date = datetime.now()
+            end_date = datetime.now(timezone.utc)
             start_date = end_date - timedelta(days=365)
 
         # Fetch all PRs (open and closed)

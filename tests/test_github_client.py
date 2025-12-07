@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import Mock, MagicMock, patch
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from github_pr_review.github_client import GitHubPRClient
 
 
@@ -132,10 +132,10 @@ def test_get_prs_for_year_with_year(mock_github_class):
     mock_github.get_repo.return_value = mock_repo
 
     mock_pr1 = Mock()
-    mock_pr1.created_at = datetime(2024, 6, 15)
+    mock_pr1.created_at = datetime(2024, 6, 15, tzinfo=timezone.utc)
 
     mock_pr2 = Mock()
-    mock_pr2.created_at = datetime(2024, 1, 1)
+    mock_pr2.created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
 
     # Mock closed PRs
     mock_closed_prs = Mock()
