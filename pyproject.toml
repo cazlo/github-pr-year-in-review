@@ -1,0 +1,13 @@
+[project]
+name = "github-pr-review"
+version = "0.1.0"
+description = "Analyze GitHub pull requests and generate year-in-review summary reports"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pygithub>=2.8.1",
+    "pytest>=9.0.2",
+]
+
+[project.scripts]
+github-pr-review = "github_pr_review.cli:main"
