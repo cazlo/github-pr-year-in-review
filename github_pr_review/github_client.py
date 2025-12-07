@@ -45,8 +45,8 @@ class GitHubPRClient:
         # Fetch all PRs (open and closed)
         prs = []
         try:
-            # Get closed PRs within date range
-            closed_prs = repository.get_pulls(state="closed", sort="updated", direction="desc")
+            # Get closed PRs within date range (sort by created for proper date filtering)
+            closed_prs = repository.get_pulls(state="closed", sort="created", direction="desc")
             for pr in closed_prs:
                 if pr.created_at < start_date:
                     break
