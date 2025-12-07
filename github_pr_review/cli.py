@@ -2,6 +2,7 @@
 
 import os
 import sys
+import json
 import click
 from datetime import datetime
 from pathlib import Path
@@ -31,7 +32,12 @@ from github_pr_review.report_generator import ReportGenerator
     help="Directory to save reports (default: ./reports)",
     default="./reports",
 )
-def main(organization, user, year, token, output_dir):
+@click.option(
+    "--pr-data-file",
+    help="Path to existing PR data JSON file (skip GitHub API calls if provided)",
+    default=None,
+)
+def main(organization, user, year, token, output_dir, pr_data_file):
     """
     Generate year-in-review summary for a GitHub user's PRs across an organization.
 
@@ -48,15 +54,19 @@ def main(organization, user, year, token, output_dir):
         # Use environment variable for token
         export GITHUB_TOKEN=ghp_xxx
         github-pr-review myorg john --year 2024
+
+        # Use pre-fetched PR data (skip GitHub API calls)
+        github-pr-review myorg john --year 2024 --pr-data-file ./reports/myorg-john-2024-raw-pr-data.json
     """
-    # Get token from args or environment
+    # Get token from args or environment (not needed if using pr-data-file)
     token = token or os.environ.get("GITHUB_TOKEN")
-    if not token:
+    if not pr_data_file and not token:
         click.echo(
             click.style("Error: GitHub token is required for organization access.", fg="red"),
             err=True,
         )
         click.echo("Set GITHUB_TOKEN environment variable or use --token flag.", err=True)
+        click.echo("Alternatively, use --pr-data-file to load pre-fetched data.", err=True)
         sys.exit(1)
 
     # Determine year for report
@@ -67,40 +77,83 @@ def main(organization, user, year, token, output_dir):
     click.echo()
 
     try:
-        # Initialize client
-        client = GitHubPRClient(token)
-        
-        # Get all repos where user has contributed
-        click.echo("Fetching repositories...")
-        repos = client.get_user_repos_in_org(organization, user)
-        
-        if not repos:
-            click.echo(click.style(f"No repositories found where {user} has contributed.", fg="yellow"))
-            return
-
-        click.echo(f"Found {len(repos)} repositories with contributions")
-        click.echo()
-
-        # Fetch PRs from all repos
         pr_data_by_repo = {}
         all_pr_data = []
-        
-        with click.progressbar(repos, label="Fetching PRs from repositories") as bar:
-            for repo in bar:
-                repo_name = repo.full_name
-                prs = client.get_prs_for_user_in_repo(repo, user, year)
-                
-                if prs:
-                    pr_data = [client.extract_pr_data(pr, repo_name) for pr in prs]
-                    pr_data_by_repo[repo_name] = pr_data
-                    all_pr_data.extend(pr_data)
 
-        if not all_pr_data:
-            click.echo(click.style(f"No pull requests found for {user} in {year}.", fg="yellow"))
-            return
+        if pr_data_file:
+            # Load PR data from existing file
+            click.echo(f"Loading PR data from {pr_data_file}...")
+            pr_data_path = Path(pr_data_file)
+            
+            if not pr_data_path.exists():
+                click.echo(click.style(f"Error: File not found: {pr_data_file}", fg="red"), err=True)
+                sys.exit(1)
+            
+            with open(pr_data_path, 'r') as f:
+                all_pr_data = json.load(f)
+            
+            # Parse datetime strings back to datetime objects
+            for pr in all_pr_data:
+                if pr.get('created_at'):
+                    pr['created_at'] = datetime.fromisoformat(pr['created_at'].replace('Z', '+00:00'))
+                if pr.get('closed_at'):
+                    pr['closed_at'] = datetime.fromisoformat(pr['closed_at'].replace('Z', '+00:00'))
+                if pr.get('merged_at'):
+                    pr['merged_at'] = datetime.fromisoformat(pr['merged_at'].replace('Z', '+00:00'))
+            
+            # Organize by repo
+            for pr in all_pr_data:
+                repo_name = pr.get('repository', 'unknown')
+                if repo_name not in pr_data_by_repo:
+                    pr_data_by_repo[repo_name] = []
+                pr_data_by_repo[repo_name].append(pr)
+            
+            click.echo(f"Loaded {len(all_pr_data)} pull requests across {len(pr_data_by_repo)} repositories")
+            click.echo()
+        else:
+            # Fetch data from GitHub API
+            # Initialize client
+            client = GitHubPRClient(token)
+            
+            # Get all repos where user has contributed
+            click.echo("Fetching repositories...")
+            repos = client.get_user_repos_in_org(organization, user)
+            
+            if not repos:
+                click.echo(click.style(f"No repositories found where {user} has contributed.", fg="yellow"))
+                return
 
-        click.echo(f"\nFound {len(all_pr_data)} pull requests across {len(pr_data_by_repo)} repositories")
-        click.echo()
+            click.echo(f"Found {len(repos)} repositories with contributions")
+            click.echo()
+
+            # Fetch PRs from all repos
+            with click.progressbar(repos, label="Fetching PRs from repositories") as bar:
+                for repo in bar:
+                    repo_name = repo.full_name
+                    prs = client.get_prs_for_user_in_repo(repo, user, year)
+                    
+                    if prs:
+                        pr_data = [client.extract_pr_data(pr, repo_name) for pr in prs]
+                        pr_data_by_repo[repo_name] = pr_data
+                        all_pr_data.extend(pr_data)
+
+            if not all_pr_data:
+                click.echo(click.style(f"No pull requests found for {user} in {year}.", fg="yellow"))
+                return
+
+            click.echo(f"\nFound {len(all_pr_data)} pull requests across {len(pr_data_by_repo)} repositories")
+            click.echo()
+            
+            # Save raw PR data to JSON
+            output_dir_path = Path(output_dir)
+            output_dir_path.mkdir(parents=True, exist_ok=True)
+            raw_data_path = output_dir_path / f"{organization}-{user}-{year}-raw-pr-data.json"
+            
+            click.echo(f"Saving raw PR data to {raw_data_path}...")
+            with open(raw_data_path, 'w') as f:
+                json.dump(all_pr_data, f, indent=2, default=str)
+            click.echo(f"✓ Raw PR data saved: {raw_data_path}")
+            click.echo()
 
         # Analyze data
         click.echo("Analyzing PR data...")
