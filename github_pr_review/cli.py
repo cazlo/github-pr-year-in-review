@@ -200,7 +200,7 @@ def main(organization, user, year, token, output_dir, pr_data_file):
         # 3. Generate yearly summary aggregated
         yearly_agg_path = output_dir / f"{organization}-{user}-{year}-aggregated-summary.md"
         generator.generate_yearly_summary_aggregated(
-            aggregated_analyzer, str(yearly_agg_path)
+            aggregated_analyzer, analyzer_by_repo, str(yearly_agg_path)
         )
         click.echo(f"✓ Yearly summary (aggregated): {yearly_agg_path}")
 

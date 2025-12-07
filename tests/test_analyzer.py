@@ -321,3 +321,82 @@ def test_business_insights():
     assert "velocity_metrics" in business
     assert "productivity_metrics" in business
     assert business["estimated_cost_savings"]["bug_fixes"] > 0
+
+
+def test_fuzzy_conventional_commit_matching():
+    """Test that fuzzy conventional commit types are normalized correctly."""
+    pr_data = [
+        {
+            "number": 1,
+            "title": "doc: update README",
+            "state": "closed",
+            "created_at": datetime(2024, 1, 15),
+            "closed_at": datetime(2024, 1, 16),
+            "merged_at": datetime(2024, 1, 16),
+            "merged": True,
+            "author": "user1",
+            "description": "Updates documentation",
+            "labels": [],
+            "time_to_close_hours": 24.0,
+            "url": "https://github.com/owner/repo/pull/1",
+            "additions": 10,
+            "deletions": 5,
+            "changed_files": 1,
+            "commit_messages": ["doc: improve docs"],
+        },
+        {
+            "number": 2,
+            "title": "hotfix: critical bug fix",
+            "state": "closed",
+            "created_at": datetime(2024, 1, 17),
+            "closed_at": datetime(2024, 1, 17),
+            "merged_at": datetime(2024, 1, 17),
+            "merged": True,
+            "author": "user2",
+            "description": "Hotfix for production issue",
+            "labels": [],
+            "time_to_close_hours": 2.0,
+            "url": "https://github.com/owner/repo/pull/2",
+            "additions": 20,
+            "deletions": 10,
+            "changed_files": 2,
+            "commit_messages": ["hotfix: resolve critical issue"],
+        },
+        {
+            "number": 3,
+            "title": "chore(deps): update dependencies",
+            "state": "closed",
+            "created_at": datetime(2024, 1, 18),
+            "closed_at": datetime(2024, 1, 18),
+            "merged_at": datetime(2024, 1, 18),
+            "merged": True,
+            "author": "user1",
+            "description": "Updates npm packages",
+            "labels": [],
+            "time_to_close_hours": 1.0,
+            "url": "https://github.com/owner/repo/pull/3",
+            "additions": 5,
+            "deletions": 5,
+            "changed_files": 1,
+            "commit_messages": ["chore(deps): bump versions"],
+        },
+    ]
+    
+    analyzer = PRAnalyzer(pr_data)
+    conv_commits = analyzer.get_conventional_commits_analysis()
+    
+    # Check that 'doc:' was normalized to 'docs:'
+    assert 'docs' in conv_commits['commit_types']
+    assert conv_commits['commit_types']['docs'] == 2  # title + commit message
+    
+    # Check that 'hotfix:' was normalized to 'fix:'
+    # Note: hotfix appears in title, description start, and commit message
+    assert 'fix' in conv_commits['commit_types']
+    assert conv_commits['commit_types']['fix'] >= 2  # at least title + commit message
+    
+    # Check that 'chore(deps):' was still parsed as 'chore:'
+    assert 'chore' in conv_commits['commit_types']
+    assert conv_commits['commit_types']['chore'] == 2  # title + commit message
+    
+    # Verify fix_count includes hotfix commits
+    assert conv_commits['fix_count'] >= 2

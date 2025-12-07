@@ -81,22 +81,26 @@ def test_format_currency():
 def test_generate_yearly_summary_aggregated(sample_pr_data, temp_output_dir):
     """Test aggregated yearly summary generation."""
     analyzer = PRAnalyzer(sample_pr_data)
+    analyzer_by_repo = {
+        "org/repo1": PRAnalyzer([sample_pr_data[0]]),
+        "org/repo2": PRAnalyzer([sample_pr_data[1]]),
+    }
     generator = ReportGenerator("myorg", "testuser", 2024)
 
     output_path = temp_output_dir / "summary.md"
-    generator.generate_yearly_summary_aggregated(analyzer, str(output_path))
+    generator.generate_yearly_summary_aggregated(analyzer, analyzer_by_repo, str(output_path))
 
     assert output_path.exists()
     content = output_path.read_text()
 
-    # Check that key sections are present
-    assert "# GitHub PR Year in Review - 2024 (Aggregated)" in content
+    # Check that key sections are present (with emojis)
+    assert "📊 GitHub PR Year in Review - 2024 (Aggregated)" in content
     assert "Organization:** myorg" in content
     assert "User:** testuser" in content
     assert "Total PRs:** 2" in content
     assert "Merged:** 2" in content
-    assert "Conventional Commits Analysis" in content
-    assert "Business Value & Cost Savings" in content
+    assert "🏷️ Conventional Commits Analysis" in content
+    assert "💰 Business Value & Cost Savings" in content
 
 
 def test_generate_yearly_summary_by_repo(sample_pr_data, temp_output_dir):
@@ -117,10 +121,10 @@ def test_generate_yearly_summary_by_repo(sample_pr_data, temp_output_dir):
     assert output_path.exists()
     content = output_path.read_text()
 
-    assert "# GitHub PR Year in Review - 2024 (By Repository)" in content
+    assert "📊 GitHub PR Year in Review - 2024 (By Repository)" in content
     assert "org/repo1" in content
     assert "org/repo2" in content
-    assert "Conventional Commits" in content
+    assert "🏷️ Conventional Commits" in content
 
 
 def test_generate_monthly_breakdown_aggregated(sample_pr_data, temp_output_dir):
@@ -135,7 +139,7 @@ def test_generate_monthly_breakdown_aggregated(sample_pr_data, temp_output_dir):
     assert output_path.exists()
     content = output_path.read_text()
 
-    assert "# Monthly Breakdown - 2024 (Aggregated)" in content
+    assert "📅 Monthly Breakdown - 2024 (Aggregated)" in content
     assert "Organization:** myorg" in content
     assert "January 2024" in content
     assert "February 2024" in content
@@ -176,10 +180,14 @@ def test_generate_json_output(sample_pr_data, temp_output_dir):
 def test_reports_create_directory_if_not_exists(sample_pr_data, temp_output_dir):
     """Test that directories are created if they don't exist."""
     analyzer = PRAnalyzer(sample_pr_data)
+    analyzer_by_repo = {
+        "org/repo1": PRAnalyzer([sample_pr_data[0]]),
+        "org/repo2": PRAnalyzer([sample_pr_data[1]]),
+    }
     generator = ReportGenerator("myorg", "testuser", 2024)
 
     nested_path = temp_output_dir / "nested" / "path" / "summary.md"
-    generator.generate_yearly_summary_aggregated(analyzer, str(nested_path))
+    generator.generate_yearly_summary_aggregated(analyzer, analyzer_by_repo, str(nested_path))
 
     assert nested_path.exists()
     assert nested_path.parent.exists()

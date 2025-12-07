@@ -18,13 +18,19 @@ class PRAnalyzer:
     
     # Pattern for conventional commits
     CONVENTIONAL_COMMIT_PATTERN = re.compile(
-        r'^(feat|fix|docs|chore|refactor|test|ci|perf|style|build|revert)(\([^)]+\))?: .+',
+        r'^(feat|fix|docs?|hotfix|chore|refactor|test|ci|perf|style|build|revert)(\([^)]+\))?: .+',
         re.MULTILINE | re.IGNORECASE
     )
     COMMIT_TYPE_PATTERN = re.compile(
-        r'^(feat|fix|docs|chore|refactor|test|ci|perf|style|build|revert)',
+        r'^(feat|fix|docs?|hotfix|chore|refactor|test|ci|perf|style|build|revert)',
         re.IGNORECASE
     )
+    
+    # Mapping for fuzzy matches to canonical types
+    COMMIT_TYPE_ALIASES = {
+        'doc': 'docs',
+        'hotfix': 'fix',
+    }
 
     def __init__(self, pr_data: List[Dict[str, Any]]):
         """
@@ -34,6 +40,19 @@ class PRAnalyzer:
             pr_data: List of dictionaries containing PR data
         """
         self.pr_data = pr_data
+    
+    def _normalize_commit_type(self, commit_type: str) -> str:
+        """
+        Normalize commit type to canonical form.
+        
+        Args:
+            commit_type: Raw commit type from regex match
+            
+        Returns:
+            Normalized commit type
+        """
+        commit_type = commit_type.lower()
+        return self.COMMIT_TYPE_ALIASES.get(commit_type, commit_type)
 
     def get_total_prs(self) -> int:
         """Get total number of PRs."""
@@ -125,18 +144,18 @@ class PRAnalyzer:
         # Check PR title
         title_match = self.COMMIT_TYPE_PATTERN.match(pr["title"])
         if title_match:
-            types.append(title_match.group(1).lower())
+            types.append(self._normalize_commit_type(title_match.group(1)))
         
         # Check PR description
         for match in self.COMMIT_TYPE_PATTERN.finditer(pr["description"]):
-            types.append(match.group(1).lower())
+            types.append(self._normalize_commit_type(match.group(1)))
         
         # Check commit messages
         if "commit_messages" in pr:
             for message in pr["commit_messages"]:
                 match = self.COMMIT_TYPE_PATTERN.match(message)
                 if match:
-                    types.append(match.group(1).lower())
+                    types.append(self._normalize_commit_type(match.group(1)))
         
         return types
 
